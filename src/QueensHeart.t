@@ -68,12 +68,15 @@ gameMain: GameMainDef
         \b
         No one answers.
         \b""";
-/*        
- *   <b><<versionInfo.name>></b>\n <<versionInfo.byline>> (ZoloDog @
- *   GlobalGameJam13)\n
- */
-        """\b[Type HELP for instructions on how to play.]\b       
+        
+        "<hr><center><b><<versionInfo.name>></b>\n <<versionInfo.byline>>\n(ZoloDog @
+        GlobalGameJam13)\n";
+ 
+        """
+        [Type HELP for instructions on how to play.]\b</center><hr>
         """;
+        
+        new Daemon(knot, &tighten, 3);
     }    
 ;
 
@@ -87,7 +90,7 @@ me: Actor
 
 + sorrow: Thing 'sorrow' 'sorrow'
     "Sometimes your sorrow is a dark void in your chest, sometimes it
-    is a gray weight between your shoulders, and sometimes it is an
+    is a gray weight between your shoulders, and sometimes it is a
     languid emptiness everywhere. At the moment, it is 
     <<if self.weight < 0>> not so heavy.
     <<else if self.weight == 0>> a heavy burden.
@@ -163,6 +166,59 @@ me: Actor
     }
 ;
 
+knot: Thing 'knot in my your stomach/knot' 'knot in your stomach'
+    //TODO: expand desc
+    "It is a tightening sense of unease. You often feel this way when you are
+    away from the Queen for too long.  What if something should happen to her?
+    What if... what if she wasn't there?  What if you were alone?"
+    tightness = 0
+    
+    tighten() {
+        if (me.location == the_queens_chambers && self.tightness < 2) {
+            //ignore incr
+            return;
+        }
+        self.tightness++;
+        "\b...\n";
+        if (self.tightness <= 0) {
+            //ignore
+        }else if (self.tightness == 1) {
+            self.moveInto(me);
+            "You begin to feel a little nervous... as if you've forgotten something
+            important.";
+        }else if (self.tightness == 2) {
+            "Your stomach tightens.  You wonder if everything is 
+            okay...\n Of course, the Queen makes everything okay.";
+        }else if (self.tightness == 3) {
+            "Your palms are getting sweaty now.  Why do you feel like this?
+            Something must surely be wrong... wrong with the Queen, perhaps?
+            The urge to look upon her once more is very strong.";
+        }else {
+            "<<one of>>Your armpits are slick, and your back is sweaty.
+            <<or>>You feel weak and dizzy.
+            <<or>>You suddenly gag and shiver.<<shuffled>> 
+            The sense of doom is nearly crushing you.  The Queen!  Does she
+            still live?  Does her heart still beat in the darkness?\b
+            <<one of>>\"Stupid, useless goblin!\" you sob at yourself.<<or>>
+            \"One job!  You only have one job!\" you scream at yourself.  Then
+            your vision blurs with tears.<<shuffled>>.\b            
+            You have gone so long without checking, you fear what you might 
+            find... but check you must!";
+        }
+    }
+    
+    relax() {
+        self.tightness = 0;
+        self.moveInto(nil);
+        "The tension pours out of you.  Your breathing slows, and the knot in 
+         your stomach loosens and disappears once more.";
+    }
+    
+    dobjFor(Drop) {
+        check() {failCheck('This agony is part of you.');}
+    }
+;
+
 
 /* 
  * The maze of tunnels that forms the bulk of the warren.
@@ -177,17 +233,22 @@ the_western_tunnels: Room 'The Western Tunnels'
     west = the_queens_chambers
     
     leavingRoom(traveler) {
-        if (mole.alive) {
+        if (mole.alive && mole.inHole) {
             mole.moveInto(nil);
             mole.inHole = false;
-            "The mole scurries far back into his hole and disappears.";
+            "The mole scurries far back into his hole and disappears.\n";
         }
     }
-
 ;
-
-+ Decoration 'stone arch*arches' 'stone arches';
-+ Decoration 'wooden support beam*beams' 'support beams';
++ Decoration 'small hole' 'small hole'
+  "The hole is barely big enough for the mole, and certainly too small for you.";
++ Decoration 'stone arch*arches' 'stone arches'
+  "Fine goblin craftsmanship from ages past.";
++ Decoration 'wooden support beam*beams' 'support beams'
+  "These are later additions to hold the tunnels up when the stone arches started to crack.
+  On one of these wooden posts, you started tracking years, adding one scratch 
+  every winter.  After a dozen scratches, you moved onto another post.  After
+  a dozen posts, you stopped scratching.";
 //FIX: not plural in "get" message, etc.
 
 + mole : Food 'mole' '<<!self.alive ? 'dead ' : ''>>mole'
@@ -223,7 +284,16 @@ the_western_tunnels: Room 'The Western Tunnels'
         }
     }
     dobjFor(AttackWith) {
-        check() { if (iobj == sword) return true;}
+        check() { 
+            if (self.inHole) {
+                failCheck('The mole is still safe in his hole.');
+            }
+            if (IndirectObject == sword) {
+                return true; 
+            }
+            inherited;
+            return;
+        }
         action() {
             mole.alive = false;
             "You draw your sword slowly, then bring it down quickly on the mole.
@@ -233,6 +303,9 @@ the_western_tunnels: Room 'The Western Tunnels'
         }
     }
     dobjFor(Attack) {
+        check() {
+            if (self.inHole) failCheck('The mole is still safe in his hole.');
+        }
         action() {
             mole.alive = false;
             "You fall suddenly onto the mole, wrapping your long fingers around it.
@@ -277,18 +350,108 @@ the_great_seal: Room 'The Great Seal'
  * The well, though the goblin thinks of it as the pool.
  */
 the_well: Room 'The Pool'
-    "Water here..."
+    "You stand at the mouth of a tunnel that opens into a wide vertical shaft.
+    Several feet below you, the shaft is filled with still water.  The walls
+    of the shaft are lined with old flagstones, rounded by age and slick with
+    moisture.
+    <<if self.open>><<self.dark ? " Stars glint through the ragged hole at the 
+        top of the shaft." : " A beam of sunlight pours through the shaft above,
+        reflecting off the water below and burning your eyes.">><<else>>
+         Above you is only darkness.<<end>>"
     
     west = the_eastern_tunnels
+    dark = true
+    open = false
 ;
-
++ Fixture 'shaft/wall*walls' 'shaft' 
+    dobjFor(Examine) remapTo(Examine, the_well)
+    dobjFor(Climb) {
+        verify() { return false;}
+        check() {
+            if (!the_well.open) {
+                failCheck('There seems no point to that: there is only darkness up there.');
+            }
+            return false;
+        }
+    }
+;
++ Decoration 'water/pool' 'water' 
+    "...";  //CONT
+;
+    
 /*
  * The Queen's resting place.
  */
 the_queens_chambers: Room 'The Queen\'s Chambers'
-    "Queen..."
+    "This round room is lined in stone.  Although it is just as dark in here
+    as the rest of the Warren, it always feels brighter to you.
+    \b
+    In the center of the room is a bier, surrounded by a protective mandala 
+    etched upon the floor."
     
     east = the_western_tunnels
+    
+    enteringRoom(traveler) {
+        "You stop and bow low as you enter the room.";
+    }
+;
+
++ Decoration 'bier/fur*furs' 'bier'
+    "The bier is a hewn stone slab covered in multiple layers of furs.";
+
++ Fixture 'magic magical protective circle/mandala/ward' 'mandala'
+    "The mandala is a protective Ward formed of swirls, runes, and glyphs etched 
+    upon the floor in a large circle around the bier.  This ancient goblin magic 
+    hides the queen from the ravages of time and iron.  You have spent countless
+    hours--sometimes whole days--carefully tracing and retracing the lines in 
+    chalk or in blood.  Of course, material rich in iron works best, 
+    for \"like repels like.\""
+    
+    dobjFor(Trace) {
+        verify() { return false;}
+        action() {
+            "You trace your fingers over the lines of the mandala, murmuring
+            the incantations written there from memory.  This does not make the
+            Ward any stronger, but it calms you a little.";
+            knot.tightness = knot.tightness - 2;
+            if (knot.tightness <= 0) {
+                knot.moveInto(nil);
+            }
+        }
+    }
+;
+
++ queen: Fixture 'upon queen' 'Queen'
+    "The Queen lies pale and slender beneath a fur blanket.  Her eyes are closed, 
+    so you gaze upon her for a while.  As always, her serenity fills your chest 
+    with a bittersweet ache.
+    \b
+    The Queen sleeps.  She will sleep until Man recedes from the Earth, until
+    all cold iron rusts, until Nature calls the goblins once more into the 
+    Green.
+    \b
+    You alone protect her while she slumbers.  You, alone.
+    \b
+    Her breath is so faint now that you cannot see the blanket rise or fall.
+    Over her chest, there is a faint depression in the blanket where you have 
+    so often laid your head, listening for the beating of her heart."
+    
+    properName = true
+    initSpecialDesc = "The Queen slumbers still upon the bier.";   
+;
+
+++ SimpleNoise 'heart' 'heartbeat'
+    desc {
+        "You take a deep breath, hold it tightly, and lay your head ever so gently 
+        upon the Queen's chest.
+        \b
+        <sound src='beating.ogg' layer='foreground'>
+        Straining your ears, you feel her heart faintly beating.";
+        if (knot.tightness > 0) {
+            " She lives! ";
+            knot.relax();
+        }
+    }
 ;
 
 /*
@@ -300,15 +463,29 @@ DefineIAction(Help)
       Read the descriptions of what is happening and then type in commands
       specifying what you want your character (the goblin) to do next.
       \b
-      Some sample commands include: LISTEN, WAIT, INVENTORY, EXAMINE SORROW, 
-      GO EAST, and GET MOLE.'); 
+      Some sample commands include: LOOK, EXAMINE SORROW, GO EAST, and GET MOLE.
+      \b
+      You can complete all actions supported by this game using only these
+      verbs/commands: LOOK, INVENTORY, WAIT, GO (direction), EXAMINE (object), 
+      GET (object), DROP (object), KILL (creature), LISTEN to (object), 
+      TRACE (object), CLIMB (object)');
     }
 ;
-
 VerbRule(Help)
      'help' : HelpAction
 ;
 
-
-
-
+DefineTAction(Trace);
+VerbRule(Trace)
+     ('trace' | 'retrace' | 'fix' | 'repair') singleDobj : TraceAction
+     verbPhrase = 'trace/tracing (what)'
+;
+modify Thing
+     dobjFor(Trace)
+     {
+       verify() 
+       {
+         illogical('Tracing {that dobj/him} would achieve very little. ');
+       }
+     }
+;
