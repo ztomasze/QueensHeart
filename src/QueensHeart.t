@@ -44,7 +44,7 @@ gameMain: GameMainDef
         You can hear a faint scratching... a sort of scurrying... No, it is a 
         <i>burrowing</i>... Yes, it is definitely a burrowing sound... though a
         rather small one.  Too small for a badger, too steady for a rabbit, 
-        which leaves only one thing: a mole.  There's a mole burrowing through 
+        which leaves only one thing: a mole.  There is a mole burrowing through 
         the soft earth to your right.
         \b
         You look down at the earthworms in your hand.  "A bit of mole-fishing,
@@ -76,7 +76,7 @@ gameMain: GameMainDef
         [Type HELP for instructions on how to play.]\b</center><hr>
         """;
         
-        new Daemon(knot, &tighten, 3);
+        new Daemon(knot, &tighten, 5);
     }    
 ;
 
@@ -350,33 +350,101 @@ the_great_seal: Room 'The Great Seal'
  * The well, though the goblin thinks of it as the pool.
  */
 the_well: Room 'The Pool'
-    "You stand at the mouth of a tunnel that opens into a wide vertical shaft.
-    Several feet below you, the shaft is filled with still water.  The walls
-    of the shaft are lined with old flagstones, rounded by age and slick with
-    moisture.
+    "You stand at the mouth of a narrow tunnel that opens into a wide vertical shaft.
+    A few feet below you, the shaft is filled with still water.  The walls
+    of the shaft are lined with old flagstones, rounded by age.  The stones
+    are slick with moisture near the water, but further up the shaft, stray 
+    roots have poked between the stones.
     <<if self.open>><<self.dark ? " Stars glint through the ragged hole at the 
-        top of the shaft." : " A beam of sunlight pours through the shaft above,
+        top of the shaft." : " A beam of sunlight pours through a ragged hole above,
         reflecting off the water below and burning your eyes.">><<else>>
          Above you is only darkness.<<end>>"
     
     west = the_eastern_tunnels
-    dark = true
+    up: NoTravelMessage { "There seems no point to that: there is only darkness up there." }
+    dark = false
     open = false
-;
-+ Fixture 'shaft/wall*walls' 'shaft' 
-    dobjFor(Examine) remapTo(Examine, the_well)
-    dobjFor(Climb) {
-        verify() { return false;}
-        check() {
-            if (!the_well.open) {
-                failCheck('There seems no point to that: there is only darkness up there.');
-            }
-            return false;
-        }
+    
+    dobjFor(Up) remapTo(Climb, shaft) 
+    
+    introGirl() {
+        the_well.open = true;
+        wellHole.moveInto(the_well);
+        girl.moveInto(the_well);
+        the_well.up = outside;
+        girl.motionDaemon = new Daemon(girl, &motion, 1);
+        "\b...\n
+        Suddenly, to the east, you hear a distant crack, a scream, and a splash!";
+        
     }
 ;
++shaft: Fixture 'shaft/wall*walls' 'shaft' 
+    dobjFor(Examine) remapTo(Examine, the_well)
+    dobjFor(Climb) remapTo(Up)
+;
 + Decoration 'water/pool' 'water' 
-    "...";  //CONT
+    "You come here for drinking water sometimes.  The water is too far away for
+    you to reach from here.  When you need water, you lower down a rag and then
+    squeeze the water out of the rag.  You seem to have mislaid your rag 
+    somewhere... but no matter.  You are not thirsty at the moment."; 
+;
+
+wellHole: Fixture 'ragged well hole' 'ragged hole'
+    "In the <<the_well.dark ? "starlight" : "sunlight">> now pouring through it,
+    you can see that the top of the well shaft was actually capped by an ancient
+    wooden cover of thick planks.  It must have rotted over the years, and then
+    the little girl walked over it and broke through.
+    <<if plank.location == wellHole>>
+    \b
+    One of the long planks is hanging down into the well, barely attached at the
+    other end.<<end>>"
+    
+    dobjFor(Climb) remapTo(Climb, shaft)
+;
+
++ plank: Fixture 'long wooden plank/cover' 'plank'
+    "It is a long wooden plank, still attached to the old well-cover above, 
+    but only barely."
+;
+
+girl: Fixture 'human girl/child' 'human child'
+    "It is a skinny wet little girl with dark hair.  The cold water of the pool
+    comes up to her waist. Even from here, you can smell the iron on her: 
+    the taint of the world of Man, which drives all magic underground."
+    
+    motionDaemon = nil  
+    motion() {  //handles the girl's motion
+        if (me.location == the_well) {
+            "\b...\n<<one of>>
+            The girl tries to climb the slick flagstones, but she cannot get a grip.<<or>>
+            The girl jumps, trying to grab a thick root that is sticking out between
+            some of the higher flagstones.  The sound of her splashing failure 
+            echoes up the shaft of the well.<<or>>
+            The girl stands still for a while, looking around the well.<<or>>
+            The girl wades across to the other side of the pool.<<or>>
+            The girl looks up at the <<the_well.dark ? "starlight" : "sunlight">>
+            pouring through the hole above.<<or>>
+            The girl scans the walls of the well for other handholds.  You stand very still as
+            her eyes pass over you.  Goblins are not easily detected when they don\'t want 
+            to be.<<or>>
+            The girl puts her face in her hands for a while.  You can hear her sniffling.<<or>>
+            The girl yells something you can't make out up at the hole.  Her voice is
+            distrubingly loud and alien to you.<<or>>
+            The girl wraps her arms around herself, shivering.
+            <<half shuffled>>";
+        }else {
+            "<<one of>>
+            <<or>><<or>><<or>><<or>>
+            \b...\nYou hear a splash from the direction of the pool.<<or>>
+            \b...\nYou hear a very quiet sobbing from the direction of the pool.<<or>>
+            \b...\nYou hear a hear a long yell from the direction of the pool.
+            <<shuffled>>";
+        }
+    }
+    begone() {
+        self.motionDaemon.removeEvent();
+        self.moveInto(nil);
+    }
 ;
     
 /*
@@ -451,6 +519,91 @@ the_queens_chambers: Room 'The Queen\'s Chambers'
             " She lives! ";
             knot.relax();
         }
+        if (!the_well.open) {
+            the_well.open = true;
+            new Fuse(the_well, &introGirl, 2);
+        }
+    }
+;
+
+outside : OutdoorRoom 'Outside'
+    desc  {"You stand in an empty overgrown field.  There are no living 
+        trees here, but some distance away you see a very wide smooth path.  
+        Standing evenly along the side of the path are a row of branchless
+        poles.  A tight cable runs from pole to pole.  The path and the cable
+        run in a straight line as far as you can see in either direction.
+        \b
+        You feel naked and cold out here.  The very wind carries iron on it, 
+        burning your skin.  You can feel it crushing your heart like ice forming
+        around a blossom.  This world belongs to Man now, to the child down
+        in the well.  But you are goblin, one of the last.  
+        \b
+        This outside world will strip the magic and the glammer from you.";
+        me.deluded = false;
+    }
+               
+    down = the_well
+    cantTravelMsg = 'There is nothing for you that way.'
+;
+
++ Decoration 'road/path' 'path'
+  "The makings of Man are best avoided."
+;    
++ Decoration 'cable/rope' 'iron cable'
+  "The makings of Man are best avoided."
+;
++ Decoration 'pole*poles' 'pole'
+  "The makings of Man are best avoided."    
+;
+
++ plankEnd : Fixture 'end long plank/end' 'plank'
+    "<<if me.location == outside>>
+    It is the end of the long plank that hangs down into the well.  It is barely
+    hanging on, thanks to a couple rusty nails.  It would only take a little push
+    to send it down into the well.<<else>>
+    One end of the heavy plank is submerged in the water, 
+    while the other end leans on the far wall.<<end>>"
+
+    initSpecialDesc = "<<if me.location == outside>>
+        You can see the end of a long plank that hangs 
+        down into the well.<<else>>
+        A heavy plank, partially submerged in the water, leans against the far wall<<end>>"
+    
+    cannotTakeMsg = 'The plank is too long and heavy to carry, but you could push it.'
+    dobjFor(Push) {
+        verify() { return false; }
+        action() {
+            if (self.location == the_well) {
+                "The plank is too far way to reach.";
+            }else {
+            "You push the end of the plank.  The iron nails groan a little and the 
+            plank starts to sway back and forth.  You can hear the girl move
+            in the water below you.  You push a little harder and the nails pop free.
+            The plank drops into the water with a splash.
+            \b
+            Peering down after it, you can see that the plank landed on its end
+            in the center of the pool and then toppled against the wall.  This formed
+            a steep ramp.  The child is already clambering up the ramp, grabbing
+            at roots, and dragging herself up out of the well.
+            \b
+            She stands, panting and dripping before you.  She is over twice your
+            height, and she stares at you with wide eyes.  You stand very still... 
+            but you know she can see you here.  Your glammer is fading in this 
+            outside world.
+            \b
+            Suddenly, she turns and runs.  She stops when she gets to the
+            wide path and turns back to look at you.  Tentatively, she waves.
+            Then she turns and runs on before you can decide how to reply.
+            \b
+            Oddly, your sorrow feels lighter than it has in a long long time.";
+            sorrow.weight -= 2;
+            
+            girl.begone();
+            plankEnd.moveInto(the_well);
+            plankEnd.moved = nil;
+            plank.moveInto(nil);
+            }
+        }
     }
 ;
 
@@ -464,11 +617,16 @@ DefineIAction(Help)
       specifying what you want your character (the goblin) to do next.
       \b
       Some sample commands include: LOOK, EXAMINE SORROW, GO EAST, and GET MOLE.
+      The directions you can move from the current location are listed in the
+      header above the game text.
       \b
       You can complete all actions supported by this game using only these
       verbs/commands: LOOK, INVENTORY, WAIT, GO (direction), EXAMINE (object), 
       GET (object), DROP (object), KILL (creature), LISTEN to (object), 
-      TRACE (object), CLIMB (object)');
+      TRACE (object), CLIMB (object)
+      \b
+      Stuck? EXAMINE everything that might be interesting.  The resulting object 
+      descriptions will sometimes give you hint as to what you might do next.');
     }
 ;
 VerbRule(Help)
@@ -479,6 +637,10 @@ DefineTAction(Trace);
 VerbRule(Trace)
      ('trace' | 'retrace' | 'fix' | 'repair') singleDobj : TraceAction
      verbPhrase = 'trace/tracing (what)'
+;
+
+VerbRule(Listen)
+    ('check' | 'check' 'on') singleDobj : ListenToAction
 ;
 modify Thing
      dobjFor(Trace)
