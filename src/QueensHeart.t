@@ -365,8 +365,6 @@ the_well: Room 'The Pool'
     dark = false
     open = false
     
-    dobjFor(Up) remapTo(Climb, shaft) 
-    
     introGirl() {
         the_well.open = true;
         wellHole.moveInto(the_well);
@@ -388,6 +386,42 @@ the_well: Room 'The Pool'
     squeeze the water out of the rag.  You seem to have mislaid your rag 
     somewhere... but no matter.  You are not thirsty at the moment."; 
 ;
++ rock : Heavy 'large rock/stone/boulder' 'large rock'
+    "This large rough grey stone once blocked the entrance to the tunnel.
+     It is nearly as big as you are and takes all of your strength to move.
+     It sits on the edge of the ledge."
+    initSpecialDesc = "A large stone partly hides the entrance to the tunnel."
+    dobjFor(Push) {
+        action() {
+            if (girl.location == the_well) {
+                "You quietly get behind the stone and wait... wait until the
+                girl moves directly below you.  Then you push, hard and fast,
+                with all your strength.  
+                \b
+                The great rock groans and topples forward before the girl can move.  
+                It strikes her hard, pushing her forward and carrying her below 
+                the surface of the water.
+                \b
+                You watch the choppy ripples slowly subside on the surface of 
+                the pool. \"Ever your protector, my Queen.  Ever shall we be
+                safe.\"";
+                rock.moveInto(nil);
+                girl.alive = false;
+                girl.moveInto(nil);
+                girl.motionDaemon.removeEvent();
+                the_well.up = noSunlightForMe;
+            }else {
+                "At the moment, there seems little reason to push the stone into 
+                either the tunnel entrance behind you or into the pool below.";
+            }
+        }
+    }
+;
+
+noSunlightForMe : FakeConnector
+   travelDesc = "There is no point.  There is nothing up there for you.
+                There will be only painful sunlight, cold iron, and Man.\n"
+; 
 
 wellHole: Fixture 'ragged well hole' 'ragged hole'
     "In the <<the_well.dark ? "starlight" : "sunlight">> now pouring through it,
@@ -412,6 +446,7 @@ girl: Fixture 'human girl/child' 'human child'
     comes up to her waist. Even from here, you can smell the iron on her: 
     the taint of the world of Man, which drives all magic underground."
     
+    alive = true
     motionDaemon = nil  
     motion() {  //handles the girl's motion
         if (me.location == the_well) {
@@ -444,6 +479,9 @@ girl: Fixture 'human girl/child' 'human child'
     begone() {
         self.motionDaemon.removeEvent();
         self.moveInto(nil);
+        plankEnd.moveInto(the_well);
+        plankEnd.moved = nil;
+        plank.moveInto(nil);        
     }
 ;
     
@@ -510,6 +548,7 @@ the_queens_chambers: Room 'The Queen\'s Chambers'
 
 ++ SimpleNoise 'heart' 'heartbeat'
     desc {
+      if (me.deluded) {
         "You take a deep breath, hold it tightly, and lay your head ever so gently 
         upon the Queen's chest.
         \b
@@ -523,6 +562,28 @@ the_queens_chambers: Room 'The Queen\'s Chambers'
             the_well.open = true;
             new Fuse(the_well, &introGirl, 2);
         }
+        if (!girl.alive) {
+            "\b\"I have protected you, my Queen.  I will always protect you.
+            Until Man recedes from the Earth, until all cold iron rusts, 
+            until Nature calls us once more into the Green, I will protect you.
+            \b
+            And I will never be alone.\"";
+            finishGameMsg('The End', []);    
+        }
+      }else {
+        "Carefully, reverently, you lay your head upon the chest of the queen, 
+        as you have done so many times before.  You let out a long sigh and 
+        listen... but you hear nothing.
+        \b
+        Quivering, you take a deep breath, hold it, and listen again.  And now
+        you feel it once more, faintly, that beating you know so well, the beating
+        of the Queen's heart.
+        \b
+        Puzzled, you exhale.  The beating stops.
+        \b
+        You are a goblin, alone.  Your sorrow has never been so heavy.";
+            finishGameMsg('The End', []);
+      }
     }
 ;
 
@@ -543,7 +604,34 @@ outside : OutdoorRoom 'Outside'
     }
                
     down = the_well
-    cantTravelMsg = 'There is nothing for you that way.'
+    cannotGoThatWayMsg = 'There is nothing for you that way.  '
+    
+    leavingRoom(traveler) {
+        if (girl.location == the_well) {
+            "As you scramble back down through the hole in the well cover, 
+            you hear a splintering crack beneath you.  You throw yourself to
+            one side and then grab at a root with one hand as you start to slide
+            into the well.  Beneath you, a heavy plank tears free
+            of the well cover and falls into the water below.
+            \b
+            Clinging to the side of the well, you peer down.  You can see that 
+            the plank landed on its end in the center of the pool and then 
+            toppled against the far wall.  This formed
+            a steep ramp.  The child is already clambering up the ramp, grabbing
+            at roots, and dragging herself up out of the well.
+            \b
+            You carefully climb down to the tunnel ledge, you heart thumping in
+            your chest.  Once there, you survey the damage to your pool.  Glancing
+            up, you see that the girl is still here, staring down over the lip
+            of the well.  It makes your skin crawl how she seems to be staring
+            right at you... as if you had no goblin glammer left.
+            \b
+            Then the girl turns and disappears out of sight.  \"Good riddance!\"
+            you mutter to yourself.  This whole experience has left you shaken
+            and scared.";
+            girl.begone();
+        }
+    }
 ;
 
 + Decoration 'road/path' 'path'
@@ -567,7 +655,7 @@ outside : OutdoorRoom 'Outside'
     initSpecialDesc = "<<if me.location == outside>>
         You can see the end of a long plank that hangs 
         down into the well.<<else>>
-        A heavy plank, partially submerged in the water, leans against the far wall<<end>>"
+        A heavy plank, partially submerged in the water, leans against the far wall.<<end>>"
     
     cannotTakeMsg = 'The plank is too long and heavy to carry, but you could push it.'
     dobjFor(Push) {
@@ -599,9 +687,6 @@ outside : OutdoorRoom 'Outside'
             sorrow.weight -= 2;
             
             girl.begone();
-            plankEnd.moveInto(the_well);
-            plankEnd.moved = nil;
-            plank.moveInto(nil);
             }
         }
     }
