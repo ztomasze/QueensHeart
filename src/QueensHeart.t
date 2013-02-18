@@ -83,9 +83,10 @@ gameMain: GameMainDef
 /*
  * Our goblin protagonist.
  */
-me: Actor
-   location = the_western_tunnels
-   deluded = true
+me: Actor 
+    name = 'goblin'
+    location = the_western_tunnels
+    deluded = true
 ;
 
 + sorrow: Thing 'sorrow' 'sorrow'
@@ -99,6 +100,7 @@ me: Actor
     
     //TODO: customize better based on weight
     //TODO: feel, not look
+    isQualifiedName = true
     weight = 0
     
     dobjFor(Drop) {
@@ -124,10 +126,10 @@ me: Actor
     }
     dobjFor(Drop) {
         action() {
-            inherited();
+            inherited;
             if (me.location == the_western_tunnels && mole.inHole) {
-                mole.moved = true;
                 mole.inHole = false;
+                mole.moved = true;
                 extraReport('\bThe worms wriggle there for a while.
                     \b
                     After a moment, the mole pushes his nose a little
@@ -265,11 +267,11 @@ the_western_tunnels: Room 'The Western Tunnels'
         twitching nose."
     
     dobjFor(Take) {
-        check() {
+        verify() {
             if (self.inHole) {
-                failCheck('Not while he is still in that hole.');
+                inaccessible('Not while he is still in that hole.');
             }else if (self.alive) {
-                failCheck('Moles are faster than they look.  If you just try to 
+                illogicalNow('Moles are faster than they look.  If you just try to 
                     pick him up, he\'ll be back into his hole before you can grab him.');
             }
         }
@@ -354,7 +356,7 @@ the_well: Room 'The Pool'
     A few feet below you, the shaft is filled with still water.  The walls
     of the shaft are lined with old flagstones, rounded by age.  The stones
     are slick with moisture near the water, but further up the shaft, stray 
-    roots have poked between the stones.
+    roots have poked between the stones.\b
     <<if self.open>><<self.dark ? " Stars glint through the ragged hole at the 
         top of the shaft." : " A beam of sunlight pours through a ragged hole above,
         reflecting off the water below and burning your eyes.">><<else>>
@@ -369,6 +371,7 @@ the_well: Room 'The Pool'
         the_well.open = true;
         wellHole.moveInto(the_well);
         girl.moveInto(the_well);
+        girl.moved = nil;
         the_well.up = outside;
         girl.motionDaemon = new Daemon(girl, &motion, 1);
         "\b...\n
@@ -446,6 +449,7 @@ girl: Fixture 'human girl/child' 'human child'
     comes up to her waist. Even from here, you can smell the iron on her: 
     the taint of the world of Man, which drives all magic underground."
     
+    initSpecialDesc = "A human girl stands in the water."
     alive = true
     motionDaemon = nil  
     motion() {  //handles the girl's motion
@@ -597,7 +601,7 @@ outside : OutdoorRoom 'Outside'
         You feel naked and cold out here.  The very wind carries iron on it, 
         burning your skin.  You can feel it crushing your heart like ice forming
         around a blossom.  This world belongs to Man now, to the child down
-        in the well.  But you are goblin, one of the last.  
+        in the well.  But you are a goblin, one of the last.  
         \b
         This outside world will strip the magic and the glammer from you.";
         me.deluded = false;
@@ -735,4 +739,188 @@ modify Thing
          illogical('Tracing {that dobj/him} would achieve very little. ');
        }
      }
+;
+
+//...............................
+
+class SkaldUI: object
+    
+    /* 
+     *   When determining affordances, should TAD's NonObviousVerifyResult be
+     *   treated as obviously afforded?  If false, then non-obvious actions will
+     *   appear likely to fail.
+     */
+    NON_OBVIOUS_IS_OBVIOUS = false
+    
+    /* 
+     *   A LookupTable matching Action objects to a corresponding ['name',
+     *   'preposition'].  The 'preposition' field is optional, but it is usual
+     *   for TIActions.
+     */
+    verbNames = new LookupTable()  
+    //XXX: could extract this from Action class names, though there would be
+    // weird verbs like VagueAsk, and Travel rather than Go.
+    
+    /*
+     *   Excutes the given command string, similarly to as if it had been typed
+     *   at the command prompt.
+     */
+    executeCmd(cmdText) {
+        //see: TADS3 > Technical Manual > "The Command Execution Cycle"
+        local toks = Tokenizer.tokenize(cmdText);
+        executeCommand(gPlayerChar, gPlayerChar, toks, true);        
+    }
+    
+    /* 
+     * Returns a list of all object currently in scope of the current
+     * playerChar.  This is the same as gPlayerChar.
+     */
+    getObjectsInScope() {
+        return libGlobal.playerChar.scopeList();
+    }
+
+    /* As getObjectsInScope(), but returns a list of the .name of the object. */
+    getObjectNamesInScope() {
+        return getObjectsInScope().mapAll({obj: obj.name});
+    }
+    
+    /*
+     *   Returns whether the following action is currently logically possible.
+     *   This taps into TADS's verify cycle at a low (and somewhat hacky) level.
+     *
+     *   Uses dobj and iobj only for TAction and TIActions, as appropriate.
+     *
+     *   Returns 0 if the action is clearly not afforded (TADS: "illogical",
+     *   "illogicalSelf", or "inaccessible"). 
+     * 
+     *   Returns > 0 if the action is clearly afforded ("logical"
+     *   in some manner, even if the ranking is low).  
+     * 
+     *   Returns < 0 if the action is only weakly afforded in
+     *   some way (any of the other TADS classes: "illogicalNow", "dangerous", 
+     *   etc.).
+     *
+     *   Note that this does not map directly to TADS's .allowAction property.
+     *   For example, an illogicalNow action would not be allowed by TADS, but
+     *   it makes sense to partially afford it since it might be possible later.
+     *
+     *   Using this scheme, it is possible to see if action is afforded in
+     *   some way (!= 0), not afforded (== 0), clearly afforded (> 0) or 
+     *   only partially/possibly afforded (< 0).
+     *
+     *   See in TADS: Action.verifyAction, VerifyResult, VerifyResultList.
+     *
+     *   Also, verify in "Getting Started in TADS3", "Learning TADS3"
+     */         
+    isAfforded(actor, action, dobj, iobj) {
+        action.actor_ = actor;
+        if (action.ofKind(TAction)) {
+            action.dobjCur_ = dobj;
+        }
+        if (action.ofKind(TIAction)) {
+            action.iobjCur_ = iobj;
+        }
+        local results = action.verifyAction();
+        local mostLimiting = results.getEffectiveResult();
+        local rank = mostLimiting.resultRank;
+        if (mostLimiting.ofKind(InaccessibleVerifyResult) ||
+            mostLimiting.ofKind(IllogicalVerifyResult)) {
+            return 0;  //includes IllogicalSelf too
+        }else if (mostLimiting.ofKind(LogicalVerifyResult)) {
+            if (rank <= 0) rank = 1;
+            return rank;   //+: allowed to degree of logical rank
+        }else {
+            //only partially afforded
+            if (rank >= 0) rank = (rank * -1) - 1;
+            return rank;   //-: weak affordance
+        }
+    }
+    
+    /* 
+     *   Returns a Skald-based JSON-formatted string of the given affordance.
+     *   dobj and iobj may be strings or lists of strings.  Uses verbNames to
+     *   find verb name and (for TIActions with iobjs given) prepositions.
+     */
+    toJsonAffordance(verb, dobj, iobj) {
+        local json = '{"affordance": ["' + self.verbNames[verb][1] + '"';
+        if (dobj) {
+            json += ', ' + self.toJsonList(dobj);
+        }
+        if (iobj) {
+            if (verb.ofKind(TIAction)) {
+               //add preposition
+               json += ', "' + self.verbNames[verb][2] + '"';
+            }
+            json += ', ' + self.toJsonList(iobj);
+        }
+        json += ']}\n';
+        return json;
+    }
+    
+    /*
+     *   Converts objs to a JSON list format.  If objs is a list, grabs .name for
+     *   each of its elements.  If not a list, throws objs into a list of a si
+     *   single elemtn and does the same thing.
+     */
+    toJsonList(objs) {
+        if (!objs.ofKind(List)) {
+            objs = [objs];
+        }
+        local json = objs.join('", "');
+        return '["' + json + '"]"';
+    }
+;
+
+skald : SkaldUI
+    verbNames = [
+        LookAction -> ['Look'],
+        ExamineAction -> ['Examine'],
+        TakeAction -> ['Take'],
+        AttackWithAction -> ['Kill', 'with']
+             //'Go' -> TravelAction
+            ]
+;
+
+
+DefineIAction(Affordances)
+    execAction() {
+
+        foreach (local verb in skald.verbNames.keysToList()) {
+
+            "<<skald.verbNames[verb][1]>>\n";
+            if (!verb.ofKind(TAction)) {
+                "<<skald.toJsonAffordance(verb, nil, nil)>>";
+            }else if (!verb.ofKind(TIAction)) {
+                local dobjs = skald.getObjectsInScope();
+//                dobjs.filter
+//                "<<skald.toJsonAffordance(verb, , 
+//                new verb
+//            }
+            }
+        }        
+    
+    }
+;
+VerbRule(Affordances)
+     'affordances' : AffordancesAction
+;
+
+DefineIAction(Objects)
+    execAction() {
+        objectLister.showSimpleList(skald.getObjectsInScope());
+    }
+;
+VerbRule(Objects)
+     ('objs' | 'objects') : ObjectsAction
+;
+
+DefineIAction(Verbs)
+    execAction() {
+        //TODO: sort list
+        "Verbs supported by this game:\n";
+        skald.verbNames.forEach({name: "* <<name>>\n"});
+    }
+;
+VerbRule(Verbs)
+     'verbs' : VerbsAction
 ;
